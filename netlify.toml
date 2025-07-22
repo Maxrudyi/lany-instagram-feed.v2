@@ -1,0 +1,10 @@
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# (не обов’язково)
+[[headers]]
+  for = "/.netlify/functions/ig"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Cache-Control = "no-cache, no-store, must-revalidate"
