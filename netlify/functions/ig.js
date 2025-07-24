@@ -1,27 +1,18 @@
 // netlify/functions/ig.js
-export async function handler(event) {
-  const token  = process.env.IG_TOKEN;
-  const fields = "id,media_url,permalink,media_type,thumbnail_url,caption";
-  const limit  = (event.queryStringParameters && event.queryStringParameters.limit) || 9;
+export default async (req, res) => {
+  const token = process.env.IG_TOKEN;
+  const igUserId = process.env.IG_USER_ID || "17841458100536914"; // твій ID
+  const fields = "id,caption,media_type,media_url,permalink,thumbnail_url";
+  const limit = req.query.limit || 8;
 
-  const url = `https://graph.instagram.com/me/media?fields=${fields}&access_token=${token}&limit=${limit}`;
+  const url = `https://graph.facebook.com/v23.0/${igUserId}/media?fields=${fields}&limit=${limit}&access_token=${token}`;
 
   try {
     const r = await fetch(url);
     const json = await r.json();
-
-    return {
-      statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(json.data || [])
-    };
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    return res.status(200).json(json.data || []);
   } catch (e) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Instagram proxy error", details: e.message })
-    };
+    return res.status(500).json({ error: "Instagram proxy error", details: e.message });
   }
-}
+};
