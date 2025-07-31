@@ -1,12 +1,10 @@
-// netlify/functions/ig.js
-
-export async function handler(event, context) {
+const handler = async (event, context) => {
   const token = process.env.IG_TOKEN;
   const igUserId = process.env.IG_USER_ID;
+
   const fields = "id,caption,media_type,media_url,permalink,thumbnail_url,timestamp";
   const limit = event.queryStringParameters?.limit || 6;
-
-  const url = https://graph.facebook.com/v18.0/${igUserId}/media?fields=${fields}&access_token=${token};
+  const url = `https://graph.facebook.com/v18.0/${igUserId}/media?fields=${fields}&access_token=${token}`;
 
   try {
     const response = await fetch(url);
@@ -17,10 +15,7 @@ export async function handler(event, context) {
       throw new Error("No media returned from Instagram API");
     }
 
-    // Сортуємо за датою
     data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    // Віддаємо тільки потрібну кількість
     const limited = data.slice(0, limit);
 
     return {
@@ -30,7 +25,6 @@ export async function handler(event, context) {
       },
       body: JSON.stringify(limited)
     };
-
   } catch (e) {
     return {
       statusCode: 500,
@@ -40,4 +34,6 @@ export async function handler(event, context) {
       })
     };
   }
-}
+};
+
+module.exports = { handler };
