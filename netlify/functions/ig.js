@@ -13,7 +13,8 @@ export async function handler(event, context) {
     const filtered = (result.data || [])
       .filter(post =>
         post.media_type === "IMAGE" ||
-        post.media_type === "VIDEO"
+        post.media_type === "VIDEO" ||
+        post.media_type === "CAROUSEL_ALBUM"
       )
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
       .slice(0, limit);
