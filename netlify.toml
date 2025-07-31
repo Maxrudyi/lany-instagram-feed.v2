@@ -1,16 +1,4 @@
+# netlify.toml
 [functions]
-  directory    = "netlify/functions"
+  directory = "netlify/functions"
   node_bundler = "esbuild"
-  external_node_modules = ["@netlify/blobs"]
-
-# CORS + невеликий кеш браузера для рідера
-[[headers]]
-  for = "/.netlify/functions/ig-read"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"
-    Cache-Control = "public, max-age=120"
-
-# (Опційно, якщо у твоєму плані доступно)
-[[scheduled.functions]]
-  name = "refresh"
-  cron = "*/10 * * * *"
