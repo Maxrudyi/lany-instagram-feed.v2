@@ -1,6 +1,7 @@
 {
-  "name": "lany-instagram-feed",
+  "name": "ig-feed",
   "private": true,
+  "engines": { "node": ">=18" },
   "dependencies": {
     "@netlify/blobs": "^6.2.0"
   }
