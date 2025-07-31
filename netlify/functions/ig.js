@@ -29,17 +29,21 @@ export async function handler(event) {
     }
 
     // відсікаємо зайве, формуємо display_url (постер для відео)
-    const items = (data.data || [])
-      .map(p => ({
-        id: p.id,
-        caption: p.caption || "",
-        media_type: p.media_type,                 // IMAGE | VIDEO | CAROUSEL_ALBUM
-        permalink: p.permalink,
-        timestamp: p.timestamp,
-        is_video: p.media_type === "VIDEO",
-        display_url: p.media_type === "VIDEO" ? (p.thumbnail_url || p.media_url) : p.media_url
-      }))
-      .filter(p => p.permalink && p.display_url);
+    // фрагмент з netlify/functions/ig.js усередині try { ... } після отримання data
+const items = (data.data || [])
+  .map(p => ({
+    id: p.id,
+    media_type: p.media_type,               // IMAGE | VIDEO | CAROUSEL_ALBUM
+    permalink: p.permalink,
+    timestamp: p.timestamp,
+    // що показуємо в гріді
+    display_url: p.media_type === "VIDEO"
+      ? (p.thumbnail_url || p.media_url)    // постер
+      : p.media_url,                         // повне фото
+    // для модалки: відео-джерело (тільки для VIDEO)
+    video_url: p.media_type === "VIDEO" ? p.media_url : null
+  }))
+  .filter(p => p.permalink && p.display_url);
 
     return {
       statusCode: 200,
