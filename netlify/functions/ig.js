@@ -3,8 +3,7 @@ export default async (req, res) => {
   const token = process.env.IG_TOKEN;
   const igUserId = process.env.IG_USER_ID || "17841458100536914"; // твій ID
   const fields = "id,caption,media_type,media_url,permalink,thumbnail_url";
-  const limit = req.query.limit || 8;
-
+  const limit = event.queryStringParameters?.limit || 8;
   const url = `https://graph.facebook.com/v23.0/${igUserId}/media?fields=${fields}&limit=${limit}&access_token=${token}`;
 
   try {
