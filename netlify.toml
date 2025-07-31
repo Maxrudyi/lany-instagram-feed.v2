@@ -1,10 +1,21 @@
-[functions]
-  directory = "netlify/functions"
-  node_bundler = "esbuild"
+# netlify.toml  (оновлений)
 
-# (не обов’язково)
+[functions]
+  # де лежать функції
+  directory = "netlify/functions"
+  # збірник для node-функцій
+  node_bundler = "esbuild"
+  # важливо: не бандлити @netlify/blobs (його надає рантайм)
+  external_node_modules = ["@netlify/blobs"]
+
+# Дозволяємо CORS і просимо короткий кеш браузера (60 c)
 [[headers]]
   for = "/.netlify/functions/ig"
   [headers.values]
     Access-Control-Allow-Origin = "*"
-    Cache-Control = "no-cache, no-store, must-revalidate"
+    Cache-Control = "public, max-age=60"
+
+# ПЛАНОВИЙ ЗБІР ФІДА (кожні 10 хв) — викликає функцію refresh
+[[scheduled.functions]]
+  name = "refresh"
+  cron = "*/10 * * * *"
