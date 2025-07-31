@@ -1,11 +1,16 @@
 [functions]
-  directory   = "netlify/functions"
+  directory    = "netlify/functions"
   node_bundler = "esbuild"
+  external_node_modules = ["@netlify/blobs"]
 
-# Дозволяємо CORS і даємо CDN-кеш 5 хв саме для /ig
+# CORS + невеликий кеш браузера для рідера
 [[headers]]
-  for = "/.netlify/functions/ig"
+  for = "/.netlify/functions/ig-read"
   [headers.values]
     Access-Control-Allow-Origin = "*"
-    # CDN (s-maxage) кешує 300 cек, браузер — 0 (можеш змінити за бажанням)
-    Cache-Control = "public, max-age=0, s-maxage=300, stale-while-revalidate=60"
+    Cache-Control = "public, max-age=120"
+
+# (Опційно, якщо у твоєму плані доступно)
+[[scheduled.functions]]
+  name = "refresh"
+  cron = "*/10 * * * *"
