@@ -1,89 +1,74 @@
 // netlify/functions/refresh.js
-// Збирає власні пости + collab (/tags), додає обкладинки каруселям і кладе у Netlify Blobs.
+import { getStore } from '@netlify/blobs';
 
-const API = 'v18.0';
+// ==== ENV ====
+const IG_USER_ID = process.env.IG_USER_ID || '17841458100536914';
+const IG_TOKEN   = process.env.IG_TOKEN;
+const SITE_ID    = process.env.NETLIFY_SITE_ID;
+const API_TOKEN  = process.env.NETLIFY_API_TOKEN;
 
-exports.handler = async (event) => {
-  const token    = process.env.IG_TOKEN;
-  const igUserId = process.env.IG_USER_ID; // 1784...
-  if (!token || !igUserId) return send(500, { ok:false, error:'Missing IG_TOKEN or IG_USER_ID' });
+// ==== CONST ====
+const STORE_NAME = 'ig-cache';
+const BLOB_KEY   = 'latest.json';
+const FB         = 'https://graph.facebook.com/v18.0';
+const FIELDS     = 'id,caption,media_type,media_url,permalink,thumbnail_url,timestamp';
 
-  // Можеш регулювати без деплою: /refresh?own=30&tagged=10
-  const ownTake    = clamp(event.queryStringParameters?.own,    30, 1, 100);
-  const taggedTake = clamp(event.queryStringParameters?.tagged, 10, 0,  50);
+// Helper: JSON response
+function json(body, status = 200) {
+  return {
+    statusCode: status,
+    headers: { 'content-type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    body: JSON.stringify(body),
+  };
+}
 
-  try {
-    const [own, tagged] = await Promise.all([
-      getEdgePaged(igUserId, 'media',  ownTake,    8, token), // малими сторінками
-      getEdgePaged(igUserId, 'tags',   taggedTake, 5, token).catch(()=>[]) // якщо /tags «важкий» — пропускаємо, але не падаємо
-    ]);
-
-    // Мердж + дедуп
-    let items = dedupe([...own, ...tagged]);
-
-    // Обкладинки для каруселей (обмежимо до 8 дод. запитів)
-    items = await enrichCovers(items, 8, token);
-
-    // Сортуємо за часом новіші зверху
-    items.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    // Пишемо у Blobs
-    const { getStore } = await import('@netlify/blobs');
-    const store = getStore({ name: 'ig-cache', consistency: 'strong',
-      siteID: process.env.NETLIFY_SITE_ID, token: process.env.NETLIFY_API_TOKEN });
-
-    const payload = { updatedAt: new Date().toISOString(), count: items.length, items };
-    await store.set('feed.json', JSON.stringify(payload), {
-      metadata: { updatedAt: payload.updatedAt, count: String(payload.count) }
-    });
-
-    return send(200, { ok:true, saved: items.length, updatedAt: payload.updatedAt });
-  } catch (e) {
-    return send(500, { ok:false, error: e.message });
-  }
-};
-
-async function getEdgePaged(igUserId, edge, take, page, token) {
-  const fields = 'id,media_type,media_url,thumbnail_url,permalink,timestamp';
-  const base = https://graph.facebook.com/${API}/${igUserId}/${edge}?fields=${fields}&access_token=${encodeURIComponent(token)};
-  let out = [], after = null;
-  while (out.length < take) {
-    const url = ${base}&limit=${page}${after ? `&after=${after} : ''}`;
-    const r = await fetch(url);
+// Helper: paging fetch
+async function fetchAll(url) {
+  const acc = [];
+  let next = url;
+  while (next) {
+    const r = await fetch(next);
     const j = await r.json();
-    if (j?.error) throw new Error(`${edge}: ${j.error.message}`);
-    const arr = Array.isArray(j.data) ? j.data : [];
-    out = out.concat(arr);
-    after = j.paging?.cursors?.after;
-    if (!after || arr.length === 0) break;
+    if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
+    acc.push(...(j.data || []));
+    next = j?.paging?.next || null;
   }
-  return out.slice(0, take);
+  return acc;
 }
 
-async function enrichCovers(items, maxFetch, token) {
-  const out = [];
-  let used = 0;
-  for (const it of items) {
-    const copy = { ...it, cover_url: null };
-    if (it.media_type === 'VIDEO') {
-      copy.cover_url = it.thumbnail_url || null;
-    }
-    if (it.media_type === 'CAROUSEL_ALBUM' && used < maxFetch) {
-      try {
-        const url = https://graph.facebook.com/${API}/${it.id}/children?fields=id,media_type,media_url,thumbnail_url&limit=10&access_token=${encodeURIComponent(token)};
-        const jr = await (await fetch(url)).json();
-        if (Array.isArray(jr.data) && jr.data.length) {
-          const first = jr.data.find(c => c.media_type === 'IMAGE') || jr.data[0];
-          copy.cover_url = first.media_url  first.thumbnail_url  copy.cover_url;
-        }
-        used++;
-      } catch {}
-    }
-    out.push(copy);
-  }
-  return out;
-}
+// Netlify handler
+export async function handler(event) {
+  try {
+    const qs      = new URLSearchParams(event.queryStringParameters || {});
+    const own     = Number(qs.get('own')       || 24);
+    const tagged  = Number(qs.get('tagged')    || 8);
+    const perTag  = Number(qs.get('perTagged') || 6);
 
-function dedupe(arr){ const seen=new Set(); return arr.filter(x=>x?.id && !seen.has(x.id) && seen.add(x.id)); }
-function clamp(v,def,min,max){ const n=parseInt(v??def,10); return Number.isNaN(n)?def:Math.max(min,Math.min(max,n)); }
-function send(status, obj){ return { statusCode: status, headers: { 'Content-Type':'application/json' }, body: JSON.stringify(obj) }; }
+    if (!IG_TOKEN)  throw new Error('IG_TOKEN env is missing');
+    if (!SITE_ID || !API_TOKEN) throw new Error('NETLIFY_SITE_ID or NETLIFY_API_TOKEN is missing');
+
+    // 1) власні пости
+    const ownUrl   = `${FB}/${IG_USER_ID}/media?fields=${FIELDS}&access_token=${IG_TOKEN}&limit=${own}`;
+    const ownItems = await fetchAll(ownUrl);
+
+    // 2) позначені (collab / згадки)
+    const tagUrl   = `${FB}/${IG_USER_ID}/tags?fields=${FIELDS}&access_token=${IG_TOKEN}&limit=${tagged}`;
+    const tagItems = (await fetchAll(tagUrl)).slice(0, perTag);
+
+    // 3) об’єднуємо, чистимо, сортуємо
+    const merged = [...ownItems, ...tagItems]
+      .filter(m =>
+        (m.media_type === 'IMAGE' || m.media_type === 'VIDEO' || m.media_type === 'CAROUSEL_ALBUM') &&
+        m.media_url
+      )
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    // 4) зберігаємо у Blobs
+    const store = getStore({ name: STORE_NAME, siteID: SITE_ID, token: API_TOKEN });
+    await store.set(BLOB_KEY, JSON.stringify(merged), { contentType: 'application/json' });
+
+    return json({ ok: true, saved: merged.length });
+  } catch (err) {
+    return json({ ok: false, error: String(err?.message || err) }, 500);
+  }
+}
