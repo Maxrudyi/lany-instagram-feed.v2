@@ -1,14 +1,11 @@
 [functions]
-  directory    = "netlify/functions"
+  directory   = "netlify/functions"
   node_bundler = "esbuild"
 
+# Дозволяємо CORS і даємо CDN-кеш 5 хв саме для /ig
 [[headers]]
   for = "/.netlify/functions/ig"
   [headers.values]
     Access-Control-Allow-Origin = "*"
-    Cache-Control = "public, max-age=60"
-
-# Якщо хочеш, щоб плановий збір працював (коли це доступно):
-# [[scheduled.functions]]
-#   name = "refresh"
-#   cron = "*/10 * * * *"
+    # CDN (s-maxage) кешує 300 cек, браузер — 0 (можеш змінити за бажанням)
+    Cache-Control = "public, max-age=0, s-maxage=300, stale-while-revalidate=60"
